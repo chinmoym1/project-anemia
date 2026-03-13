@@ -17,6 +17,7 @@ import uuid
 
 from app.core.config import settings
 from app.api.routes import auth, patients, screening, reports, analytics
+from app.db.database import create_tables
 
 # ─── Logging Setup ───────────────────────────────────────────
 logging.basicConfig(
@@ -123,3 +124,9 @@ async def health():
 @app.get("/", include_in_schema=False)
 async def root():
     return {"message": "HemaView API — Non-Invasive Anemia Screening. Access /health for status."}
+
+
+@app.on_event("startup")
+async def startup():
+    create_tables()
+    print("✅ Database tables ready")

@@ -114,7 +114,7 @@ def hash_pii(value: str) -> str:
 # ─── Dependency — Get Current Provider ──────────────────────
 from sqlalchemy.orm import Session
 from app.db.database import get_db
-from app.models.provider import HealthcareProvider
+from app.models import HealthcareProvider
 
 async def get_current_provider(
     credentials: HTTPAuthorizationCredentials = Depends(security),
