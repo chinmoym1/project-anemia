@@ -1,0 +1,9 @@
+node_modules/
+.env
+android/app/debug.keystore
+ios/Pods/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision

@@ -1,0 +1,14 @@
+.env
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+*.pkl
+*.pt
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+app/uploads/
+app/ml/models/*.pkl
+app/ml/models/*.pt
