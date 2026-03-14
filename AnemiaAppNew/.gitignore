@@ -1,0 +1,72 @@
+# Environment Variables
+.env
+.env.local
+.env.production
+
+# Node.js & Metro & JS
+node_modules/
+*.jsbundle
+.metro-health-check*
+/coverage
+npm-debug.log
+yarn-error.log
+
+# Android & IntelliJ
+# Build outputs
+build/
+android/build/
+android/app/build/
+.cxx/
+
+# IDE & Gradle
+.idea
+.gradle
+android/.gradle/
+local.properties
+*.iml
+*.hprof
+
+# iOS, Xcode, & CocoaPods
+ios/build/
+ios/Pods/
+/vendor/bundle/
+*.xcworkspace
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+xcuserdata
+*.xccheckout
+*.moved-aside
+DerivedData
+*.hmap
+*.ipa
+*.xcuserstate
+ios/.xcode.env.local
+
+# Keys, Certificates, & Provisioning Profiles (NEVER COMMIT)
+*.keystore
+!debug.keystore
+android/app/debug.keystore
+android/app/release.keystore
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Fastlane
+# It is recommended to not store the screenshots in the git repo. 
+# Instead, use fastlane to re-generate the screenshots whenever they are needed.
+**/fastlane/report.xml
+**/fastlane/Preview.html
+**/fastlane/screenshots
+**/fastlane/test_output
+
+# Misc & OS Files
+.DS_Store
+*.log
