@@ -360,7 +360,7 @@ const PatientsScreen = ({navigation}) => {
             ))}
 
             <View style={styles.fieldGroup}>
-              <Text style={styles.fieldLabel}>BIOLOGICAL SEX *</Text>
+              <Text style={styles.fieldLabel}>GENDER *</Text>
               <View style={styles.genderRow}>
                 {GENDERS.map(g => (
                   <TouchableOpacity

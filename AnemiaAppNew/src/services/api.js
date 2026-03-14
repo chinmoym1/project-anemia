@@ -69,9 +69,10 @@ export const screeningAPI = {
 
 // Report API
 export const reportAPI = {
-  generate: sessionId =>
-    api.get(`/reports/${sessionId}`, {responseType: 'blob'}),
-  list: () => api.get('/reports'),
+  generatePdf: sessionId =>
+    api.get(`/reports/${sessionId}/pdf`, {responseType: 'blob'}),
+  getMeta: sessionId => 
+    api.get(`/reports/${sessionId}`),
 };
 
 export default api;

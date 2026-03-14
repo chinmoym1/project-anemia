@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   Alert,
 } from 'react-native';
-import {reportAPI} from '../services/api';
+import {downloadReport} from '../utils/reportDownload';
 import {COLORS, SPACING, RADIUS, SHADOW} from '../utils/designSystem';
 
 const SEVERITY_CONFIG = {
@@ -47,20 +47,9 @@ const ResultScreen = ({navigation, route}) => {
   const severity = result.severity?.toLowerCase() || 'normal';
   const config = SEVERITY_CONFIG[severity] || SEVERITY_CONFIG.normal;
 
-  const downloadReport = async () => {
-    if (!result.session_id) {
-      Alert.alert('Error', 'No session ID found.');
-      return;
-    }
-    try {
-      await reportAPI.generate(result.session_id);
-      Alert.alert('✅ Success', 'Report generated successfully.');
-    } catch (e) {
-      Alert.alert(
-        'Error',
-        'Could not generate report. Backend may not support this yet.',
-      );
-    }
+  const handleDownloadReport = async () => {
+    const patientName = patient?.full_name || 'Patient';
+    await downloadReport(result.session_id, patientName);
   };
 
   return (
@@ -258,7 +247,7 @@ const ResultScreen = ({navigation, route}) => {
       <View style={styles.actions}>
         <TouchableOpacity
           style={[styles.actionBtn, {backgroundColor: COLORS.primary}]}
-          onPress={downloadReport}>
+          onPress={handleDownloadReport}>
           <Text style={styles.actionBtnText}>📄 Download Report</Text>
         </TouchableOpacity>
         <TouchableOpacity
