@@ -223,3 +223,35 @@ async def get_recent_results(
                 "is_critical": r.is_critical,
             })
     return {"items": results, "count": len(results)}
+
+# ─── Patient History ──────────────────────────────────────────
+@router.get("/history/{patient_id}")
+async def get_patient_history(
+    patient_id: int,
+    provider: HealthcareProvider = Depends(get_current_provider),
+    db: Session = Depends(get_db),
+):
+    """Fetch all past screening results for a specific patient."""
+    sessions = (
+        db.query(ScreeningSession)
+        .filter(
+            ScreeningSession.patient_id == patient_id,
+            ScreeningSession.provider_id == provider.provider_id
+        )
+        .order_by(ScreeningSession.timestamp.desc())
+        .all()
+    )
+
+    results = []
+    for s in sessions:
+        r = s.diagnostic_result
+        if r:
+            results.append({
+                "session_id": s.session_id,
+                "hb_level": r.estimated_hb_level,
+                "severity": r.severity_classification,
+                "timestamp": s.timestamp.isoformat(),
+                "is_critical": r.is_critical,
+            })
+            
+    return {"items": results, "count": len(results)}

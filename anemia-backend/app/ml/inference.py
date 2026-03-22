@@ -32,21 +32,43 @@ def classify_severity(hb: float, sex: str = "Female") -> str:
 # ─── Step 1: Strict Eye Validation (Haar Cascades) ───────────
 def validate_is_eye(image: np.ndarray) -> bool:
     """
-    Validates if the uploaded image actually contains an eye.
-    Uses OpenCV's pre-trained Haar Cascades.
+    Validates eye presence using Haar Cascades, falling back 
+    to color analysis for macro conjunctiva shots.
     """
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     
-    # Load OpenCV's built-in eye detector
+    # 1. Try standard Haar Cascade eye detection
     eye_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_eye.xml')
-    
-    # Detect eyes in the image
     eyes = eye_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4, minSize=(50, 50))
     
-    if len(eyes) == 0:
-        raise ValueError("NO_EYE_DETECTED")
+    # Pass immediately if a full eye is found
+    if len(eyes) > 0:
+        return True
         
-    return True
+    # 2. Fallback: Check for pink/red tissue in macro shots
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    
+    # Define HSV ranges for red/pink flesh tones
+    lower_red1 = np.array([0, 40, 50])
+    upper_red1 = np.array([20, 255, 255])
+    lower_red2 = np.array([160, 40, 50])
+    upper_red2 = np.array([180, 255, 255])
+    
+    # Combine masks to isolate the tissue
+    mask1 = cv2.inRange(hsv, lower_red1, upper_red1)
+    mask2 = cv2.inRange(hsv, lower_red2, upper_red2)
+    flesh_mask = cv2.bitwise_or(mask1, mask2)
+    
+    # Calculate the ratio of flesh-toned pixels
+    total_pixels = image.shape[0] * image.shape[1]
+    flesh_ratio = cv2.countNonZero(flesh_mask) / total_pixels
+    
+    # Pass if at least 5% of the image is conjunctiva tissue
+    if flesh_ratio >= 0.05:
+        return True
+        
+    # Reject if it fails both geometry and color checks
+    raise ValueError("NO_EYE_DETECTED")
 
 
 # ─── Step 2: Image Quality Check (Laplacian Variance) ────────
