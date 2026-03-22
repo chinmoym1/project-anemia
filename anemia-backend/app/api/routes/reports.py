@@ -6,6 +6,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 from datetime import datetime
+from zoneinfo import ZoneInfo
 import io, logging
 
 from app.db.database import get_db
@@ -287,7 +288,7 @@ def generate_pdf_report(session: ScreeningSession, provider: HealthcareProvider)
         ))
         story.append(Spacer(1, 4))
         story.append(Paragraph(
-            f"Report generated: {datetime.utcnow().strftime('%d %b %Y  %H:%M UTC')}  |  "
+            f"Report generated: {datetime.now(ZoneInfo('Asia/Kolkata')).strftime('%d %b %Y, %I:%M %p IST')}  |  "
             f"HemaView v1.0  |  Session #{session.session_id}",
             disc_style
         ))
