@@ -1,8 +1,9 @@
 import React from 'react';
-import {ActivityIndicator, View, Text} from 'react-native';
+import {ActivityIndicator, View} from 'react-native';
 import {NavigationContainer} from '@react-navigation/native';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 
 import {useAuth} from '../context/AuthContext';
 import {COLORS} from '../utils/designSystem';
@@ -19,6 +20,13 @@ import ProfileScreen from '../screens/ProfileScreen';
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
+const TAB_ICONS = {
+  Dashboard: 'dashboard',
+  Screening: 'camera-alt',
+  Patients: 'people',
+  Profile: 'person',
+};
+
 const TabNavigator = () => (
   <Tab.Navigator
     screenOptions={({route}) => ({
@@ -28,16 +36,16 @@ const TabNavigator = () => (
       tabBarStyle: {
         backgroundColor: COLORS.surface,
         borderTopColor: COLORS.border,
-        height: 60,
+        height: 62,
         paddingBottom: 8,
-        paddingTop: 4,
+        paddingTop: 6,
       },
-      tabBarIcon: ({focused}) => {
-        const icons = {Dashboard: '🏠', Screening: '📷', Patients: '👥', Profile: '👤'};
-        return <Text style={{fontSize: 22}}>{icons[route.name]}</Text>;
+      tabBarLabelStyle: {
+        fontSize: 11,
+        fontWeight: '600',
       },
-      tabBarLabel: ({focused, color}) => (
-        <Text style={{fontSize: 11, color, fontWeight: focused ? '600' : '400'}}>{route.name}</Text>
+      tabBarIcon: ({color, size}) => (
+        <Icon name={TAB_ICONS[route.name]} size={size} color={color} />
       ),
     })}>
     <Tab.Screen name="Dashboard" component={DashboardScreen} />
@@ -52,7 +60,13 @@ const AppNavigator = () => {
 
   if (loading) {
     return (
-      <View style={{flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.background}}>
+      <View
+        style={{
+          flex: 1,
+          justifyContent: 'center',
+          alignItems: 'center',
+          backgroundColor: COLORS.background,
+        }}>
         <ActivityIndicator size="large" color={COLORS.primary} />
       </View>
     );

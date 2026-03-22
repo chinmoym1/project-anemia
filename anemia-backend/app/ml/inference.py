@@ -1,6 +1,6 @@
 # ============================================================
 # HEMAVIEW — ML Inference Pipeline
-# OpenCV → CIELab → Feature Extraction → Hb Prediction
+# OpenCV Strict Validation → CIELab → Feature Extraction → Hb Prediction
 # ============================================================
 
 import cv2
@@ -29,7 +29,27 @@ def classify_severity(hb: float, sex: str = "Female") -> str:
     return "normal"
 
 
-# ─── Step 1: Image Quality Check (Laplacian Variance) ────────
+# ─── Step 1: Strict Eye Validation (Haar Cascades) ───────────
+def validate_is_eye(image: np.ndarray) -> bool:
+    """
+    Validates if the uploaded image actually contains an eye.
+    Uses OpenCV's pre-trained Haar Cascades.
+    """
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    
+    # Load OpenCV's built-in eye detector
+    eye_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_eye.xml')
+    
+    # Detect eyes in the image
+    eyes = eye_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4, minSize=(50, 50))
+    
+    if len(eyes) == 0:
+        raise ValueError("NO_EYE_DETECTED")
+        
+    return True
+
+
+# ─── Step 2: Image Quality Check (Laplacian Variance) ────────
 def check_image_quality(image: np.ndarray) -> Tuple[bool, float]:
     """
     Detect motion blur using Laplacian variance.
@@ -43,7 +63,7 @@ def check_image_quality(image: np.ndarray) -> Tuple[bool, float]:
     return is_sharp, float(variance)
 
 
-# ─── Step 2: Histogram Equalization & Normalization ──────────
+# ─── Step 3: Histogram Equalization & Normalization ──────────
 def normalize_image(image: np.ndarray) -> np.ndarray:
     """Apply CLAHE to normalize lighting across different ambient conditions."""
     lab   = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
@@ -54,13 +74,12 @@ def normalize_image(image: np.ndarray) -> np.ndarray:
     return cv2.cvtColor(normalized, cv2.COLOR_LAB2BGR)
 
 
-# ─── Step 3: ROI Segmentation (Rule-based fallback) ──────────
+# ─── Step 4: ROI Segmentation (Rule-based fallback) ──────────
 def segment_roi(image: np.ndarray, image_type: str = "conjunctiva") -> Tuple[np.ndarray, np.ndarray]:
     """
     Extract Region of Interest.
     In production: U-Net semantic segmentation model.
     Current: rule-based center crop with color-range masking.
-    Replace segment_with_unet() when model weights are loaded.
     """
     h, w = image.shape[:2]
 
@@ -85,51 +104,40 @@ def segment_roi(image: np.ndarray, image_type: str = "conjunctiva") -> Tuple[np.
     return roi, mask
 
 
-# ─── Step 4: CIELab Color Space Conversion ───────────────────
+# ─── Step 5: CIELab Color Space Conversion ───────────────────
 def extract_cielab_features(roi: np.ndarray, mask: np.ndarray) -> Dict[str, float]:
-    """
-    Convert masked ROI to CIELab and extract chromaticity features.
-    L* = Luminance (discarded — removes lighting bias)
-    a* = Red-Green axis (key for hemoglobin — higher = more red)
-    b* = Blue-Yellow axis
-    """
     lab = cv2.cvtColor(roi, cv2.COLOR_BGR2LAB).astype(np.float32)
 
-    # Apply mask — only analyze tissue pixels
     mask_bool = mask > 0
     if mask_bool.sum() < 100:
-        # Fallback if mask is too small
         mask_bool = np.ones(roi.shape[:2], dtype=bool)
 
     l_channel = lab[:, :, 0][mask_bool]
     a_channel = lab[:, :, 1][mask_bool]
     b_channel = lab[:, :, 2][mask_bool]
 
-    # Normalize to 0–100 and -128–127 range
     L = l_channel * 100.0 / 255.0
     a = a_channel - 128.0
     b = b_channel - 128.0
 
-    # Erythema Index: measures redness (hemoglobin concentration proxy)
-    # EI = log(R/G) → approximated via a* in CIELab
-    erythema_index = float(np.mean(a))
+    # MATCH TRAINING SCRIPT: Use Medians to ignore LED glare
+    a_median = float(np.median(a))
+    erythema_index = float(np.percentile(a, 75)) # 75th percentile for healthy tissue
 
     return {
-        "L_mean":         float(np.mean(L)),
-        "L_std":          float(np.std(L)),
-        "a_mean":         float(np.mean(a)),       # Key feature!
+        "L_mean":         float(np.median(L)),       # Using median
+        "L_std":          float(np.std(L)),          # Ignored by model but kept for API
+        "a_mean":         a_median,                  # Using median
         "a_std":          float(np.std(a)),
-        "b_mean":         float(np.mean(b)),
+        "b_mean":         float(np.median(b)),       # Using median
         "b_std":          float(np.std(b)),
         "erythema_index": erythema_index,
-        "a_normalized":   float(np.mean(a) / 128.0),  # Normalized a* component
+        "a_normalized":   float(np.median(a) / 128.0), 
         "pixel_count":    int(mask_bool.sum()),
     }
 
-
-# ─── Step 5: HSV Feature Extraction ─────────────────────────
+# ─── Step 6: HSV Feature Extraction ─────────────────────────
 def extract_hsv_features(roi: np.ndarray, mask: np.ndarray) -> Dict[str, float]:
-    """Extract HSV-space features for ensemble feature vector."""
     hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV).astype(np.float32)
     mask_bool = mask > 0
 
@@ -137,33 +145,40 @@ def extract_hsv_features(roi: np.ndarray, mask: np.ndarray) -> Dict[str, float]:
     s = hsv[:, :, 1][mask_bool]
     v = hsv[:, :, 2][mask_bool]
 
+    # MATCH TRAINING SCRIPT: Use Medians
     return {
-        "hue_mean":        float(np.mean(h)),
-        "saturation_mean": float(np.mean(s) / 255.0),
-        "value_mean":      float(np.mean(v) / 255.0),
+        "hue_mean":        float(np.median(h)),
+        "saturation_mean": float(np.median(s) / 255.0),
+        "value_mean":      float(np.median(v) / 255.0),
         "saturation_std":  float(np.std(s) / 255.0),
     }
 
 
-# ─── Step 6: Hb Prediction ───────────────────────────────────
+# ─── Step 7: Hb Prediction ───────────────────────────────────
 class HbPredictor:
     """
     Wraps the trained regression model.
-    Production: scikit-learn Random Forest or XGBoost loaded from disk.
-    Before dataset is available: uses calibrated rule-based fallback.
+    Production: scikit-learn Random Forest loaded from disk.
     """
-
     def __init__(self):
         self.model = None
         self._try_load_model()
 
     def _try_load_model(self):
-        model_path = "app/ml/models/hb_regressor.pkl"
-        if os.path.exists(model_path):
-            self.model = joblib.load(model_path)
-            logger.info(f"Loaded Hb regression model from {model_path}")
-        else:
-            logger.warning("No trained model found — using rule-based fallback. Train the model with your dataset.")
+        # Allow checking multiple possible paths where the model could be
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        possible_paths = [
+            os.path.join(base_dir, "models", "hb_regressor.pkl"),
+            os.path.join(base_dir, "anemia_model.pkl")
+        ]
+        
+        for path in possible_paths:
+            if os.path.exists(path):
+                self.model = joblib.load(path)
+                logger.info(f"Loaded Hb regression model from {path}")
+                return
+                
+        logger.warning("No trained model found — using rule-based fallback.")
 
     def _build_feature_vector(self, lab_features: Dict, hsv_features: Dict) -> np.ndarray:
         """Assemble feature vector in the exact order the model was trained on."""
@@ -182,9 +197,7 @@ class HbPredictor:
         ]])
 
     def predict(self, lab_features: Dict, hsv_features: Dict) -> Tuple[float, float]:
-        """
-        Returns (hb_level_g_per_dL, confidence_score_0_to_100)
-        """
+        """Returns (hb_level_g_per_dL, confidence_score_0_to_100)"""
         feature_vector = self._build_feature_vector(lab_features, hsv_features)
 
         if self.model is not None:
@@ -199,10 +212,8 @@ class HbPredictor:
                 confidence = 88.0
         else:
             # ── Rule-based fallback (until dataset is provided) ──
-            # Based on published conjunctiva pallor correlations
             a_star = lab_features["a_mean"]
-            # Approximate linear regression from literature
-            # Hb ≈ 0.42 * a* + 10.5 (conjunctiva, mean from 3 studies)
+            # Approximate linear regression from literature: Hb ≈ 0.42 * a* + 10.5 
             hb_prediction = max(3.0, min(20.0, 0.42 * a_star + 10.5))
             confidence = 72.0  # Lower confidence for rule-based
 
@@ -211,12 +222,9 @@ class HbPredictor:
         return hb_prediction, round(confidence, 1)
 
 
-# ─── Step 7: SHAP Explainability (stub) ──────────────────────
+# ─── Step 8: SHAP Explainability (stub) ──────────────────────
 def get_shap_explanation(feature_vector: np.ndarray, model) -> Dict[str, float]:
-    """
-    Returns SHAP feature importance for clinical transparency.
-    Requires: pip install shap + trained model
-    """
+    """Returns SHAP feature importance for clinical transparency."""
     try:
         import shap
         explainer = shap.TreeExplainer(model)
@@ -233,60 +241,73 @@ _predictor = HbPredictor()
 
 def run_inference(image_bytes: bytes, image_type: str = "conjunctiva", sex: str = "Female") -> Dict[str, Any]:
     """
-    Full pipeline: raw bytes → hemoglobin prediction.
+    Full pipeline: raw bytes → OpenCV Validation → Hb prediction.
     Returns complete result dict ready for API response.
     """
     start_time = time.time()
 
-    # Decode image
-    nparr  = np.frombuffer(image_bytes, np.uint8)
-    image  = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-    if image is None:
-        raise ValueError("Could not decode image. Ensure it is a valid JPEG/PNG.")
+    try:
+        # Decode image
+        nparr  = np.frombuffer(image_bytes, np.uint8)
+        image  = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if image is None:
+            return {"error": "Could not decode image. Ensure it is a valid JPEG/PNG."}
 
-    # Pipeline
-    is_sharp, blur_score = check_image_quality(image)
-    if not is_sharp:
-        raise ValueError(f"Image too blurry (variance={blur_score:.1f}). Please retake.")
+        # 1. Strict Eye Validation
+        if image_type == "conjunctiva":
+            validate_is_eye(image)
 
-    normalized          = normalize_image(image)
-    roi, mask           = segment_roi(normalized, image_type)
-    lab_features        = extract_cielab_features(roi, mask)
-    hsv_features        = extract_hsv_features(roi, mask)
-    hb_level, confidence = _predictor.predict(lab_features, hsv_features)
-    severity            = classify_severity(hb_level, sex)
+        # 2. Check for Motion Blur
+        is_sharp, blur_score = check_image_quality(image)
+        if not is_sharp:
+            return {"error": f"Invalid Image: Image too blurry (variance={blur_score:.1f}). Please hold the camera steady and retake."}
 
-    elapsed_ms = int((time.time() - start_time) * 1000)
-    logger.info(f"Inference complete: Hb={hb_level} g/dL severity={severity} time={elapsed_ms}ms")
+        # 3. Medical AI Pipeline
+        normalized          = normalize_image(image)
+        roi, mask           = segment_roi(normalized, image_type)
+        lab_features        = extract_cielab_features(roi, mask)
+        hsv_features        = extract_hsv_features(roi, mask)
+        
+        # 4. Predict & Classify
+        hb_level, confidence = _predictor.predict(lab_features, hsv_features)
+        severity            = classify_severity(hb_level, sex)
 
-    return {
-        "hb_level":        hb_level,
-        "severity":        severity,
-        "confidence":      confidence,
-        "erythema_index":  lab_features["erythema_index"],
-        "is_critical":     hb_level < 7.0,
-        "processing_time_ms": elapsed_ms,
-        "blur_variance":   blur_score,
-        "model_version":   "2.1",
-        "features": {
-            **lab_features,
-            **hsv_features,
-        },
-    }
+        elapsed_ms = int((time.time() - start_time) * 1000)
+        logger.info(f"Inference complete: Hb={hb_level} g/dL severity={severity} time={elapsed_ms}ms")
+
+        # Map to the exact keys your React Native app expects!
+        return {
+            "hb_level":           round(hb_level, 1),
+            "severity":           severity,
+            "erythema_index":     round(lab_features["erythema_index"], 3),
+            "confidence":         round(confidence, 1),
+            "is_critical":        hb_level < 7.0,
+            
+            # Additional debug info
+            "processing_time_ms": elapsed_ms,
+            "blur_variance":      blur_score,
+            "model_version":      "2.2",
+            "features": {
+                **lab_features,
+                **hsv_features,
+            },
+        }
+
+    except ValueError as e:
+        if str(e) == "NO_EYE_DETECTED":
+            return {"error": "Invalid Image: No eye detected. Please capture a clear image of the eye and lower eyelid."}
+        return {"error": str(e)}
+    except Exception as e:
+        logger.error(f"Inference failed: {str(e)}")
+        return {"error": "An unexpected error occurred during image processing."}
 
 
 # ─── Model Training Stub ─────────────────────────────────────
 def train_model(X: np.ndarray, y: np.ndarray, model_path: str = "app/ml/models/hb_regressor.pkl"):
     """
     Train the Random Forest regressor on your dataset.
-    X: feature matrix (n_samples, 11 features as in _build_feature_vector)
-    y: hemoglobin values in g/dL (n_samples,)
-
-    Run this once when you have your labeled dataset:
-        from app.ml.inference import train_model
-        train_model(X_train, y_train)
     """
-    from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+    from sklearn.ensemble import RandomForestRegressor
     from sklearn.pipeline import Pipeline
     from sklearn.preprocessing import StandardScaler
     from sklearn.model_selection import cross_val_score

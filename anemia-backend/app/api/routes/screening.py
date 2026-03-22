@@ -85,13 +85,19 @@ async def analyze_image(
     # ── Strip PII from image (DISHA compliance) ───────────────
     clean_image_bytes = strip_exif_pii(image_bytes)
 
-    # ── Run ML inference pipeline ────────────────────────────
+    # ─── Run ML inference pipeline ────────────────────────────
     try:
         inference_result = run_inference(
             image_bytes=clean_image_bytes,
             image_type=image_type,
             sex=patient.biological_sex,
         )
+        
+        if "error" in inference_result:
+            raise HTTPException(status_code=400, detail=inference_result["error"])
+            
+    except HTTPException:
+        raise  # Lets the 400 error pass cleanly to your mobile app
     except ValueError as ve:
         raise HTTPException(status_code=422, detail=str(ve))
     except Exception as e:

@@ -10,6 +10,7 @@ import {
   Alert,
   Platform,
 } from 'react-native';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 import {launchCamera, launchImageLibrary} from 'react-native-image-picker';
 import {screeningAPI} from '../services/api';
 import {COLORS, SPACING, RADIUS, SHADOW} from '../utils/designSystem';
@@ -18,8 +19,10 @@ const CameraScreen = ({navigation, route}) => {
   const preselectedPatient = route.params?.patient || null;
   const [image, setImage] = useState(null);
   const [analyzing, setAnalyzing] = useState(false);
+  const [validationError, setValidationError] = useState(null);
 
   const captureImage = async (fromCamera = true) => {
+    setValidationError(null); // Clear previous errors
     const options = {
       mediaType: 'photo',
       quality: 1,
@@ -64,9 +67,9 @@ const CameraScreen = ({navigation, route}) => {
     }
 
     setAnalyzing(true);
+    setValidationError(null);
+
     try {
-      // Build FormData matching backend:
-      // image, patient_id (Form int), image_type, device_model, ambient_lux
       const formData = new FormData();
       formData.append('image', {
         uri:
@@ -84,7 +87,12 @@ const CameraScreen = ({navigation, route}) => {
       const response = await screeningAPI.analyze(formData);
       const result = response.data;
 
-      // Navigate to result with full data
+      // 🛑 Strict Backend Image Validation Check
+      if (result.error) {
+        setValidationError(result.error);
+        return;
+      }
+
       navigation.navigate('Result', {
         result: {
           session_id: result.session_id,
@@ -109,7 +117,8 @@ const CameraScreen = ({navigation, route}) => {
             ? e.response.data.detail
             : JSON.stringify(e.response.data.detail);
       }
-      Alert.alert('Analysis Failed', msg);
+      // Show strict validation failures in the UI instead of a popup
+      setValidationError(msg);
     } finally {
       setAnalyzing(false);
     }
@@ -145,26 +154,34 @@ const CameraScreen = ({navigation, route}) => {
               • ID #{preselectedPatient.patient_id}
             </Text>
           </View>
-          <Text style={{fontSize: 20}}>✅</Text>
+          <Icon
+            name="verified-user"
+            size={24}
+            color={COLORS.normal || '#4CAF50'}
+          />
         </View>
       ) : (
         <TouchableOpacity
           style={styles.noPatientBanner}
           onPress={() => navigation.navigate('Patients')}>
-          <Text style={{fontSize: 24}}>⚠️</Text>
+          <Icon name="warning" size={24} color={COLORS.warning || '#FF9800'} />
           <View style={{flex: 1}}>
             <Text style={styles.noPatientTitle}>No patient selected</Text>
             <Text style={styles.noPatientSub}>
-              Tap here → go to Patients → select patient → "Screen This Patient"
+              Tap here → Patients → select → "Screen This Patient"
             </Text>
           </View>
-          <Text style={{fontSize: 18, color: COLORS.warning}}>›</Text>
+          <Icon
+            name="chevron-right"
+            size={22}
+            color={COLORS.warning || '#FF9800'}
+          />
         </TouchableOpacity>
       )}
 
       {/* Instructions */}
       <View style={styles.instructionCard}>
-        <Text style={styles.instructionTitle}>📸 Capture Instructions</Text>
+        <Text style={styles.instructionTitle}>How to Capture</Text>
         {[
           "Gently pull down the patient's lower eyelid",
           'Ensure good lighting — natural or white light',
@@ -181,20 +198,39 @@ const CameraScreen = ({navigation, route}) => {
         ))}
       </View>
 
-      {/* Image Preview */}
+      {/* Image Preview & Target Guide */}
       <View style={styles.previewContainer}>
         {image ? (
-          <>
+          <View style={styles.imageWrapper}>
             <Image
               source={{uri: image.uri}}
               style={styles.previewImage}
               resizeMode="cover"
             />
+
+            {/* Lenskart Style Targeting Box */}
+            <View style={styles.targetOverlay} pointerEvents="none">
+              <View style={styles.targetBox}>
+                <View style={styles.cornerTL} />
+                <View style={styles.cornerTR} />
+                <View style={styles.cornerBL} />
+                <View style={styles.cornerBR} />
+              </View>
+              <Text style={styles.overlayInstruction}>
+                Verify eyelid is visible inside the brackets
+              </Text>
+            </View>
+
+            {/* Clear Button (Rendered after overlay so it's clickable) */}
             <TouchableOpacity
               style={styles.clearBtn}
-              onPress={() => setImage(null)}>
-              <Text style={styles.clearBtnText}>✕</Text>
+              onPress={() => {
+                setImage(null);
+                setValidationError(null);
+              }}>
+              <Icon name="close" size={18} color="#FFFFFF" />
             </TouchableOpacity>
+
             <View style={styles.imageInfo}>
               <Text style={styles.imageInfoText}>
                 {image.width}×{image.height} •{' '}
@@ -203,10 +239,14 @@ const CameraScreen = ({navigation, route}) => {
                   : ''}
               </Text>
             </View>
-          </>
+          </View>
         ) : (
           <View style={styles.placeholder}>
-            <Text style={styles.placeholderIcon}>📷</Text>
+            <Icon
+              name="camera-alt"
+              size={56}
+              color={COLORS.border || '#E0E0E0'}
+            />
             <Text style={styles.placeholderText}>No image selected</Text>
             <Text style={styles.placeholderSub}>
               Capture or select from gallery
@@ -215,17 +255,33 @@ const CameraScreen = ({navigation, route}) => {
         )}
       </View>
 
+      {/* Validation Error Banner */}
+      {validationError && (
+        <View style={styles.errorBanner}>
+          <Icon name="error" size={24} color="#D32F2F" />
+          <Text style={styles.errorText}>{validationError}</Text>
+        </View>
+      )}
+
       {/* Capture Buttons */}
       <View style={styles.btnRow}>
         <TouchableOpacity
-          style={[styles.captureBtn, {backgroundColor: COLORS.primary}]}
+          style={[
+            styles.captureBtn,
+            {backgroundColor: COLORS.primary || '#C62828'},
+          ]}
           onPress={() => captureImage(true)}>
-          <Text style={styles.captureBtnText}>📷 Camera</Text>
+          <Icon name="camera-alt" size={22} color="#FFFFFF" />
+          <Text style={styles.captureBtnText}>Camera</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.captureBtn, {backgroundColor: COLORS.secondary}]}
+          style={[
+            styles.captureBtn,
+            {backgroundColor: COLORS.secondary || '#1565C0'},
+          ]}
           onPress={() => captureImage(false)}>
-          <Text style={styles.captureBtnText}>🖼 Gallery</Text>
+          <Icon name="photo-library" size={22} color="#FFFFFF" />
+          <Text style={styles.captureBtnText}>Gallery</Text>
         </TouchableOpacity>
       </View>
 
@@ -243,24 +299,33 @@ const CameraScreen = ({navigation, route}) => {
             <Text style={styles.analyzeBtnText}>Analyzing conjunctiva...</Text>
           </View>
         ) : (
-          <Text style={styles.analyzeBtnText}>🔬 Analyze for Anemia</Text>
+          <View style={styles.analyzingRow}>
+            <Icon name="biotech" size={24} color="#FFFFFF" />
+            <Text style={styles.analyzeBtnText}>Analyze for Anemia</Text>
+          </View>
         )}
       </TouchableOpacity>
 
+      {/* ML Pipeline Steps */}
       {analyzing && (
         <View style={styles.analyzingCard}>
           <Text style={styles.analyzingTitle}>ML Pipeline Running</Text>
           {[
-            '🔍 Blur detection & quality check',
-            '🎨 CLAHE normalization',
-            '✂️ ROI segmentation',
-            '🔬 CIELab feature extraction',
-            '🧠 Random Forest inference',
-            '📊 WHO severity classification',
+            {icon: 'search', text: 'Blur detection & Haar Cascade eye check'},
+            {icon: 'tune', text: 'CLAHE lighting normalization'},
+            {icon: 'crop', text: 'ROI conjunctiva segmentation'},
+            {icon: 'palette', text: 'CIELab/HSV feature extraction'},
+            {icon: 'memory', text: 'Random Forest inference'},
+            {icon: 'assessment', text: 'WHO severity classification'},
           ].map((step, i) => (
-            <Text key={i} style={styles.analyzingStep}>
-              {step}
-            </Text>
+            <View key={i} style={styles.mlStep}>
+              <Icon
+                name={step.icon}
+                size={16}
+                color={COLORS.primary || '#C62828'}
+              />
+              <Text style={styles.mlStepText}>{step.text}</Text>
+            </View>
           ))}
         </View>
       )}
@@ -269,11 +334,11 @@ const CameraScreen = ({navigation, route}) => {
 };
 
 const styles = StyleSheet.create({
-  container: {flex: 1, backgroundColor: COLORS.background},
+  container: {flex: 1, backgroundColor: COLORS.background || '#f8f9fa'},
   header: {
-    backgroundColor: COLORS.primary,
-    padding: SPACING.lg,
-    paddingTop: SPACING.xl,
+    backgroundColor: COLORS.primary || '#C62828',
+    padding: SPACING.lg || 20,
+    paddingTop: SPACING.xl || 30,
   },
   headerTitle: {color: '#FFFFFF', fontSize: 24, fontWeight: '700'},
   headerSub: {color: 'rgba(255,255,255,0.8)', fontSize: 13, marginTop: 4},
@@ -281,169 +346,280 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#E8F5E9',
-    margin: SPACING.md,
-    borderRadius: RADIUS.md,
-    padding: SPACING.md,
+    margin: SPACING.md || 15,
+    borderRadius: RADIUS.md || 12,
+    padding: SPACING.md || 15,
     borderLeftWidth: 4,
-    borderLeftColor: COLORS.normal,
-    gap: SPACING.md,
+    borderLeftColor: COLORS.normal || '#4CAF50',
+    gap: SPACING.md || 15,
   },
   patientAvatar: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: COLORS.normal,
+    backgroundColor: COLORS.normal || '#4CAF50',
     justifyContent: 'center',
     alignItems: 'center',
   },
   patientAvatarText: {color: '#FFFFFF', fontSize: 20, fontWeight: '700'},
   patientBannerLabel: {
     fontSize: 11,
-    color: COLORS.normal,
+    color: COLORS.normal || '#4CAF50',
     fontWeight: '700',
     textTransform: 'uppercase',
   },
   patientBannerName: {
     fontSize: 16,
     fontWeight: '700',
-    color: COLORS.textPrimary,
+    color: COLORS.textPrimary || '#212121',
   },
-  patientBannerMeta: {fontSize: 12, color: COLORS.textSecondary, marginTop: 2},
+  patientBannerMeta: {
+    fontSize: 12,
+    color: COLORS.textSecondary || '#757575',
+    marginTop: 2,
+  },
   noPatientBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFF8E1',
-    margin: SPACING.md,
-    borderRadius: RADIUS.md,
-    padding: SPACING.md,
+    margin: SPACING.md || 15,
+    borderRadius: RADIUS.md || 12,
+    padding: SPACING.md || 15,
     borderLeftWidth: 4,
-    borderLeftColor: COLORS.warning,
-    gap: SPACING.md,
+    borderLeftColor: COLORS.warning || '#FF9800',
+    gap: SPACING.md || 15,
   },
-  noPatientTitle: {fontSize: 14, fontWeight: '700', color: COLORS.textPrimary},
+  noPatientTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.textPrimary || '#212121',
+  },
   noPatientSub: {
     fontSize: 12,
-    color: COLORS.textSecondary,
+    color: COLORS.textSecondary || '#757575',
     marginTop: 2,
     lineHeight: 18,
   },
   instructionCard: {
-    backgroundColor: COLORS.surface,
-    margin: SPACING.md,
-    borderRadius: RADIUS.md,
-    padding: SPACING.md,
-    ...SHADOW.sm,
+    backgroundColor: COLORS.surface || '#FFFFFF',
+    margin: SPACING.md || 15,
+    borderRadius: RADIUS.md || 12,
+    padding: SPACING.md || 15,
+    ...(SHADOW?.sm || {elevation: 2}),
   },
   instructionTitle: {
     fontSize: 16,
     fontWeight: '700',
-    marginBottom: SPACING.sm,
-    color: COLORS.textPrimary,
+    marginBottom: SPACING.sm || 10,
+    color: COLORS.textPrimary || '#212121',
   },
   step: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginBottom: SPACING.sm,
-    gap: SPACING.sm,
+    marginBottom: SPACING.sm || 10,
+    gap: SPACING.sm || 10,
   },
   stepNum: {
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: COLORS.primary,
+    backgroundColor: COLORS.primary || '#C62828',
     justifyContent: 'center',
     alignItems: 'center',
   },
   stepNumText: {color: '#FFFFFF', fontSize: 12, fontWeight: '700'},
   stepText: {
     fontSize: 14,
-    color: COLORS.textSecondary,
+    color: COLORS.textSecondary || '#757575',
     flex: 1,
     lineHeight: 20,
   },
   previewContainer: {
-    margin: SPACING.md,
-    height: 240,
-    borderRadius: RADIUS.lg,
-    backgroundColor: COLORS.surface,
+    margin: SPACING.md || 15,
+    height: 280,
+    borderRadius: RADIUS.lg || 16,
+    backgroundColor: COLORS.surface || '#FFFFFF',
     overflow: 'hidden',
-    ...SHADOW.md,
+    ...(SHADOW?.md || {elevation: 5}),
   },
+  imageWrapper: {width: '100%', height: '100%'},
   previewImage: {width: '100%', height: '100%'},
+
+  /* Lenskart Style Targeting Elements */
+  targetOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.2)', // Dim the outside slightly
+  },
+  targetBox: {
+    width: 240,
+    height: 120,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+    position: 'relative',
+  },
+  cornerTL: {
+    position: 'absolute',
+    top: -2,
+    left: -2,
+    width: 25,
+    height: 25,
+    borderTopWidth: 4,
+    borderLeftWidth: 4,
+    borderColor: '#4CAF50',
+  },
+  cornerTR: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    width: 25,
+    height: 25,
+    borderTopWidth: 4,
+    borderRightWidth: 4,
+    borderColor: '#4CAF50',
+  },
+  cornerBL: {
+    position: 'absolute',
+    bottom: -2,
+    left: -2,
+    width: 25,
+    height: 25,
+    borderBottomWidth: 4,
+    borderLeftWidth: 4,
+    borderColor: '#4CAF50',
+  },
+  cornerBR: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    width: 25,
+    height: 25,
+    borderBottomWidth: 4,
+    borderRightWidth: 4,
+    borderColor: '#4CAF50',
+  },
+  overlayInstruction: {
+    color: '#fff',
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginTop: 25,
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+
   clearBtn: {
     position: 'absolute',
-    top: SPACING.sm,
-    right: SPACING.sm,
+    top: SPACING.sm || 10,
+    right: SPACING.sm || 10,
     backgroundColor: 'rgba(0,0,0,0.6)',
     borderRadius: 16,
     width: 32,
     height: 32,
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 10,
   },
-  clearBtnText: {color: '#FFFFFF', fontSize: 14, fontWeight: '700'},
   imageInfo: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
     backgroundColor: 'rgba(0,0,0,0.5)',
-    padding: SPACING.xs,
+    padding: SPACING.xs || 5,
   },
   imageInfoText: {color: '#FFFFFF', fontSize: 11, textAlign: 'center'},
   placeholder: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: SPACING.sm,
+    gap: SPACING.sm || 10,
   },
-  placeholderIcon: {fontSize: 48},
   placeholderText: {
     fontSize: 16,
-    color: COLORS.textSecondary,
+    color: COLORS.textSecondary || '#757575',
     fontWeight: '600',
   },
-  placeholderSub: {fontSize: 12, color: COLORS.textSecondary},
+  placeholderSub: {fontSize: 12, color: COLORS.textSecondary || '#757575'},
+
+  errorBanner: {
+    flexDirection: 'row',
+    backgroundColor: '#FFEBEE',
+    marginHorizontal: SPACING.md || 15,
+    marginBottom: SPACING.md || 15,
+    padding: SPACING.md || 15,
+    borderRadius: RADIUS.md || 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#FFCDD2',
+  },
+  errorText: {
+    color: '#D32F2F',
+    marginLeft: 10,
+    flex: 1,
+    fontWeight: '600',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+
   btnRow: {
     flexDirection: 'row',
-    paddingHorizontal: SPACING.md,
-    gap: SPACING.md,
-    marginBottom: SPACING.md,
+    paddingHorizontal: SPACING.md || 15,
+    gap: SPACING.md || 15,
+    marginBottom: SPACING.md || 15,
   },
   captureBtn: {
     flex: 1,
-    padding: SPACING.md,
-    borderRadius: RADIUS.md,
+    flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
-    ...SHADOW.sm,
+    gap: SPACING.sm || 10,
+    padding: SPACING.md || 15,
+    borderRadius: RADIUS.md || 12,
+    ...(SHADOW?.sm || {elevation: 2}),
   },
   captureBtnText: {color: '#FFFFFF', fontWeight: '600', fontSize: 15},
   analyzeBtn: {
-    backgroundColor: COLORS.success,
-    margin: SPACING.md,
-    padding: SPACING.md,
-    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.success || '#4CAF50',
+    marginHorizontal: SPACING.md || 15,
+    marginBottom: SPACING.md || 15,
+    padding: SPACING.md || 15,
+    borderRadius: RADIUS.md || 12,
     alignItems: 'center',
-    ...SHADOW.md,
+    ...(SHADOW?.md || {elevation: 5}),
   },
   analyzeBtnDisabled: {opacity: 0.5},
-  analyzingRow: {flexDirection: 'row', alignItems: 'center', gap: SPACING.sm},
+  analyzingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm || 10,
+  },
   analyzeBtnText: {color: '#FFFFFF', fontSize: 17, fontWeight: '700'},
   analyzingCard: {
-    backgroundColor: COLORS.surface,
-    margin: SPACING.md,
-    borderRadius: RADIUS.md,
-    padding: SPACING.md,
-    ...SHADOW.sm,
-    gap: SPACING.xs,
+    backgroundColor: COLORS.surface || '#FFFFFF',
+    marginHorizontal: SPACING.md || 15,
+    marginBottom: SPACING.xl || 30,
+    borderRadius: RADIUS.md || 12,
+    padding: SPACING.md || 15,
+    ...(SHADOW?.sm || {elevation: 2}),
+    gap: SPACING.xs || 5,
   },
   analyzingTitle: {
     fontSize: 14,
     fontWeight: '700',
-    color: COLORS.textPrimary,
-    marginBottom: SPACING.xs,
+    color: COLORS.textPrimary || '#212121',
+    marginBottom: SPACING.xs || 5,
   },
-  analyzingStep: {fontSize: 13, color: COLORS.textSecondary, lineHeight: 22},
+  mlStep: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm || 10,
+    paddingVertical: 3,
+  },
+  mlStepText: {fontSize: 13, color: COLORS.textSecondary || '#757575'},
 });
 
 export default CameraScreen;

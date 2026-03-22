@@ -11,8 +11,9 @@ import {
   Modal,
   ScrollView,
 } from 'react-native';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 import {patientAPI} from '../services/api';
-import {COLORS, FONTS, SPACING, RADIUS, SHADOW} from '../utils/designSystem';
+import {COLORS, SPACING, RADIUS, SHADOW} from '../utils/designSystem';
 
 const GENDERS = ['Male', 'Female', 'Other'];
 
@@ -34,7 +35,6 @@ const PatientsScreen = ({navigation}) => {
   const loadPatients = useCallback(async () => {
     try {
       const res = await patientAPI.list();
-      // Backend returns {items: [...], total: N}
       const data = res.data?.items || res.data || [];
       setPatients(Array.isArray(data) ? data : []);
     } catch (e) {
@@ -48,8 +48,6 @@ const PatientsScreen = ({navigation}) => {
   useEffect(() => {
     loadPatients();
   }, [loadPatients]);
-
-  // Refresh when coming back from screening
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', loadPatients);
     return unsubscribe;
@@ -140,7 +138,7 @@ const PatientsScreen = ({navigation}) => {
           </View>
         )}
       </View>
-      <Text style={styles.chevron}>›</Text>
+      <Icon name="chevron-right" size={24} color={COLORS.textSecondary} />
     </TouchableOpacity>
   );
 
@@ -152,13 +150,14 @@ const PatientsScreen = ({navigation}) => {
         <TouchableOpacity
           style={styles.addBtn}
           onPress={() => setModalVisible(true)}>
-          <Text style={styles.addBtnText}>+ Add</Text>
+          <Icon name="person-add" size={20} color="#FFFFFF" />
+          <Text style={styles.addBtnText}>Add</Text>
         </TouchableOpacity>
       </View>
 
       {/* Search */}
       <View style={styles.searchBar}>
-        <Text style={styles.searchIcon}>🔍</Text>
+        <Icon name="search" size={20} color={COLORS.textSecondary} />
         <TextInput
           style={styles.searchInput}
           placeholder="Search patients..."
@@ -166,9 +165,14 @@ const PatientsScreen = ({navigation}) => {
           value={search}
           onChangeText={setSearch}
         />
+        {search.length > 0 && (
+          <TouchableOpacity onPress={() => setSearch('')}>
+            <Icon name="close" size={18} color={COLORS.textSecondary} />
+          </TouchableOpacity>
+        )}
       </View>
 
-      {/* List */}
+      {/* Patient List */}
       {loading ? (
         <ActivityIndicator
           size="large"
@@ -189,10 +193,10 @@ const PatientsScreen = ({navigation}) => {
           refreshing={loading}
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Text style={styles.emptyIcon}>👥</Text>
+              <Icon name="people-outline" size={64} color={COLORS.border} />
               <Text style={styles.emptyText}>No patients yet</Text>
               <Text style={styles.emptySubText}>
-                Tap "+ Add" to add your first patient
+                Tap "Add" to add your first patient
               </Text>
             </View>
           }
@@ -207,8 +211,10 @@ const PatientsScreen = ({navigation}) => {
         {selectedPatient && (
           <View style={styles.detailContainer}>
             <View style={styles.detailHeader}>
-              <TouchableOpacity onPress={() => setSelectedPatient(null)}>
-                <Text style={styles.backIcon}>←</Text>
+              <TouchableOpacity
+                onPress={() => setSelectedPatient(null)}
+                style={styles.backBtn}>
+                <Icon name="arrow-back" size={24} color="#FFFFFF" />
               </TouchableOpacity>
               <Text style={styles.detailTitle}>Patient Details</Text>
               <View style={{width: 40}} />
@@ -239,7 +245,7 @@ const PatientsScreen = ({navigation}) => {
                       label: 'Last Hb',
                       value: selectedPatient.last_hb_level
                         ? `${selectedPatient.last_hb_level.toFixed(1)} g/dL`
-                        : 'No screening',
+                        : 'No data',
                     },
                     {
                       label: 'Status',
@@ -254,41 +260,47 @@ const PatientsScreen = ({navigation}) => {
                 </View>
               </View>
 
-              {/* Screen This Patient Button */}
+              {/* Screen Button */}
               <TouchableOpacity
                 style={styles.screenBtn}
                 onPress={() => {
                   setSelectedPatient(null);
                   navigation.navigate('Screening', {patient: selectedPatient});
                 }}>
-                <Text style={styles.screenBtnIcon}>📷</Text>
+                <Icon name="camera-alt" size={26} color="#FFFFFF" />
                 <Text style={styles.screenBtnText}>Screen This Patient</Text>
               </TouchableOpacity>
 
-              {/* Notes */}
-              {selectedPatient.notes && (
-                <View style={styles.notesCard}>
-                  <Text style={styles.notesTitle}>Notes</Text>
-                  <Text style={styles.notesText}>{selectedPatient.notes}</Text>
-                </View>
-              )}
-
-              {/* Registered date */}
-              <View style={styles.notesCard}>
-                <Text style={styles.notesTitle}>Registered</Text>
-                <Text style={styles.notesText}>
-                  {selectedPatient.created_at
+              {/* Info rows */}
+              {[
+                {
+                  icon: 'edit-note',
+                  title: 'Notes',
+                  value: selectedPatient.notes || 'No notes added',
+                  show: true,
+                },
+                {
+                  icon: 'calendar-today',
+                  title: 'Registered',
+                  value: selectedPatient.created_at
                     ? new Date(selectedPatient.created_at).toLocaleDateString(
                         'en-IN',
-                        {
-                          day: 'numeric',
-                          month: 'long',
-                          year: 'numeric',
-                        },
+                        {day: 'numeric', month: 'long', year: 'numeric'},
                       )
-                    : 'Unknown'}
-                </Text>
-              </View>
+                    : 'Unknown',
+                  show: true,
+                },
+              ]
+                .filter(i => i.show)
+                .map(item => (
+                  <View key={item.title} style={styles.infoCard}>
+                    <View style={styles.infoCardRow}>
+                      <Icon name={item.icon} size={18} color={COLORS.primary} />
+                      <Text style={styles.infoCardTitle}>{item.title}</Text>
+                    </View>
+                    <Text style={styles.infoCardValue}>{item.value}</Text>
+                  </View>
+                ))}
             </ScrollView>
           </View>
         )}
@@ -305,8 +317,9 @@ const PatientsScreen = ({navigation}) => {
               onPress={() => {
                 setModalVisible(false);
                 resetForm();
-              }}>
-              <Text style={styles.backIcon}>←</Text>
+              }}
+              style={styles.backBtn}>
+              <Icon name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <Text style={styles.detailTitle}>Add New Patient</Text>
             <View style={{width: 40}} />
@@ -340,7 +353,7 @@ const PatientsScreen = ({navigation}) => {
               {
                 label: 'NOTES (optional)',
                 key: 'notes',
-                placeholder: 'Any relevant medical notes',
+                placeholder: 'Any medical notes',
                 keyboard: 'default',
                 capitalize: 'sentences',
               },
@@ -360,7 +373,7 @@ const PatientsScreen = ({navigation}) => {
             ))}
 
             <View style={styles.fieldGroup}>
-              <Text style={styles.fieldLabel}>GENDER *</Text>
+              <Text style={styles.fieldLabel}>BIOLOGICAL SEX *</Text>
               <View style={styles.genderRow}>
                 {GENDERS.map(g => (
                   <TouchableOpacity
@@ -370,6 +383,21 @@ const PatientsScreen = ({navigation}) => {
                       form.biological_sex === g && styles.genderBtnActive,
                     ]}
                     onPress={() => setForm(f => ({...f, biological_sex: g}))}>
+                    <Icon
+                      name={
+                        g === 'Male'
+                          ? 'male'
+                          : g === 'Female'
+                          ? 'female'
+                          : 'transgender'
+                      }
+                      size={16}
+                      color={
+                        form.biological_sex === g
+                          ? '#FFFFFF'
+                          : COLORS.textSecondary
+                      }
+                    />
                     <Text
                       style={[
                         styles.genderText,
@@ -389,7 +417,15 @@ const PatientsScreen = ({navigation}) => {
               {saving ? (
                 <ActivityIndicator color="#FFFFFF" />
               ) : (
-                <Text style={styles.saveBtnText}>Save Patient</Text>
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: SPACING.sm,
+                  }}>
+                  <Icon name="save" size={20} color="#FFFFFF" />
+                  <Text style={styles.saveBtnText}>Save Patient</Text>
+                </View>
               )}
             </TouchableOpacity>
           </ScrollView>
@@ -411,12 +447,15 @@ const styles = StyleSheet.create({
   },
   headerTitle: {color: '#FFFFFF', fontSize: 24, fontWeight: '700'},
   addBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
     backgroundColor: 'rgba(255,255,255,0.2)',
     borderRadius: RADIUS.md,
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
   },
-  addBtnText: {color: '#FFFFFF', fontWeight: '700', fontSize: 15},
+  addBtnText: {color: '#FFFFFF', fontWeight: '700', fontSize: 14},
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -427,7 +466,6 @@ const styles = StyleSheet.create({
     gap: SPACING.sm,
     ...SHADOW.sm,
   },
-  searchIcon: {fontSize: 16},
   searchInput: {flex: 1, height: 44, fontSize: 15, color: COLORS.textPrimary},
   patientCard: {
     flexDirection: 'row',
@@ -458,9 +496,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   severityText: {fontSize: 11, fontWeight: '600'},
-  chevron: {fontSize: 24, color: COLORS.textSecondary},
   empty: {alignItems: 'center', paddingTop: 80, gap: SPACING.sm},
-  emptyIcon: {fontSize: 48},
   emptyText: {fontSize: 18, fontWeight: '600', color: COLORS.textSecondary},
   emptySubText: {fontSize: 14, color: COLORS.textSecondary},
   // Detail Modal
@@ -473,7 +509,7 @@ const styles = StyleSheet.create({
     padding: SPACING.md,
     paddingTop: SPACING.xl,
   },
-  backIcon: {color: '#FFFFFF', fontSize: 24, width: 40},
+  backBtn: {width: 40, height: 40, justifyContent: 'center'},
   detailTitle: {
     flex: 1,
     color: '#FFFFFF',
@@ -521,22 +557,26 @@ const styles = StyleSheet.create({
     gap: SPACING.sm,
     ...SHADOW.md,
   },
-  screenBtnIcon: {fontSize: 24},
   screenBtnText: {color: '#FFFFFF', fontSize: 18, fontWeight: '700'},
-  notesCard: {
+  infoCard: {
     backgroundColor: COLORS.surface,
     borderRadius: RADIUS.md,
     padding: SPACING.md,
     ...SHADOW.sm,
   },
-  notesTitle: {
+  infoCardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    marginBottom: SPACING.xs,
+  },
+  infoCardTitle: {
     fontSize: 12,
     fontWeight: '700',
     color: COLORS.textSecondary,
     textTransform: 'uppercase',
-    marginBottom: 6,
   },
-  notesText: {fontSize: 15, color: COLORS.textPrimary},
+  infoCardValue: {fontSize: 15, color: COLORS.textPrimary},
   // Form
   fieldGroup: {marginBottom: SPACING.md},
   fieldLabel: {
@@ -560,8 +600,10 @@ const styles = StyleSheet.create({
   genderBtn: {
     flex: 1,
     height: 44,
+    flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
+    gap: SPACING.xs,
     borderWidth: 1,
     borderColor: COLORS.border,
     borderRadius: RADIUS.md,
@@ -571,7 +613,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary,
     borderColor: COLORS.primary,
   },
-  genderText: {fontSize: 14, color: COLORS.textSecondary, fontWeight: '500'},
+  genderText: {fontSize: 13, color: COLORS.textSecondary, fontWeight: '500'},
   genderTextActive: {color: '#FFFFFF', fontWeight: '700'},
   saveBtn: {
     backgroundColor: COLORS.primary,

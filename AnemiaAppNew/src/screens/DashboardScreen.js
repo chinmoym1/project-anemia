@@ -8,14 +8,15 @@ import {
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 import {patientAPI, screeningAPI} from '../services/api';
 import {useAuth} from '../context/AuthContext';
 import {COLORS, SPACING, RADIUS, SHADOW} from '../utils/designSystem';
 
-const StatCard = ({icon, label, value, color}) => (
+const StatCard = ({iconName, label, value, color}) => (
   <View style={[styles.statCard, SHADOW.sm]}>
     <View style={[styles.statIcon, {backgroundColor: color + '20'}]}>
-      <Text style={{fontSize: 22}}>{icon}</Text>
+      <Icon name={iconName} size={26} color={color} />
     </View>
     <Text style={styles.statValue}>{value}</Text>
     <Text style={styles.statLabel}>{label}</Text>
@@ -36,16 +37,12 @@ const DashboardScreen = ({navigation}) => {
 
   const loadData = useCallback(async () => {
     try {
-      // Load patients count
       const patientsRes = await patientAPI.list(1, 100);
       const totalPatients =
         patientsRes.data?.total || patientsRes.data?.items?.length || 0;
 
-      // Load recent screenings
       const screeningsRes = await screeningAPI.recent(50);
       const recentItems = screeningsRes.data?.items || [];
-
-      // Calculate stats from screenings
       const totalScreenings = screeningsRes.data?.count || recentItems.length;
       const severeCount = recentItems.filter(
         s => s.severity?.toLowerCase() === 'severe',
@@ -72,8 +69,6 @@ const DashboardScreen = ({navigation}) => {
   useEffect(() => {
     loadData();
   }, [loadData]);
-
-  // Refresh when tab comes into focus
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', loadData);
     return unsubscribe;
@@ -89,11 +84,11 @@ const DashboardScreen = ({navigation}) => {
 
   const severityIcon = sev =>
     ({
-      severe: '🔴',
-      moderate: '🟠',
-      mild: '🟡',
-      normal: '🟢',
-    }[sev?.toLowerCase()] || '⚪');
+      severe: 'warning',
+      moderate: 'error',
+      mild: 'info',
+      normal: 'check-circle',
+    }[sev?.toLowerCase()] || 'help');
 
   if (loading) {
     return (
@@ -121,9 +116,7 @@ const DashboardScreen = ({navigation}) => {
       <View style={styles.header}>
         <View>
           <Text style={styles.greeting}>Welcome back,</Text>
-          <Text style={styles.userName}>
-            {user?.full_name || user?.email?.split('@')[0] || 'Doctor'}
-          </Text>
+          <Text style={styles.userName}>{user?.full_name || 'Doctor'}</Text>
           <Text style={styles.subTitle}>
             {new Date().toLocaleDateString('en-IN', {
               weekday: 'long',
@@ -139,32 +132,31 @@ const DashboardScreen = ({navigation}) => {
         </View>
       </View>
 
-      {/* Pull to refresh hint */}
       <Text style={styles.refreshHint}>↓ Pull down to refresh</Text>
 
       {/* Stats */}
       <Text style={styles.sectionTitle}>Overview</Text>
       <View style={styles.statsGrid}>
         <StatCard
-          icon="👥"
+          iconName="people"
           label="Patients"
           value={stats.patients}
           color={COLORS.secondary}
         />
         <StatCard
-          icon="📷"
+          iconName="camera-alt"
           label="Screenings"
           value={stats.screenings}
           color={COLORS.primary}
         />
         <StatCard
-          icon="🔴"
+          iconName="warning"
           label="Severe"
           value={stats.severe}
           color={COLORS.severe}
         />
         <StatCard
-          icon="🟢"
+          iconName="check-circle"
           label="Normal"
           value={stats.normal}
           color={COLORS.normal}
@@ -177,13 +169,13 @@ const DashboardScreen = ({navigation}) => {
         <TouchableOpacity
           style={[styles.actionBtn, {backgroundColor: COLORS.primary}]}
           onPress={() => navigation.navigate('Patients')}>
-          <Text style={styles.actionIcon}>📷</Text>
+          <Icon name="camera-alt" size={30} color="#FFFFFF" />
           <Text style={styles.actionText}>New Screening</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.actionBtn, {backgroundColor: COLORS.secondary}]}
           onPress={() => navigation.navigate('Patients')}>
-          <Text style={styles.actionIcon}>➕</Text>
+          <Icon name="person-add" size={30} color="#FFFFFF" />
           <Text style={styles.actionText}>Add Patient</Text>
         </TouchableOpacity>
       </View>
@@ -199,7 +191,17 @@ const DashboardScreen = ({navigation}) => {
                 styles.recentRow,
                 index < recentScreenings.length - 1 && styles.recentRowBorder,
               ]}>
-              <Text style={{fontSize: 20}}>{severityIcon(item.severity)}</Text>
+              <View
+                style={[
+                  styles.recentIconCircle,
+                  {backgroundColor: severityColor(item.severity) + '20'},
+                ]}>
+                <Icon
+                  name={severityIcon(item.severity)}
+                  size={20}
+                  color={severityColor(item.severity)}
+                />
+              </View>
               <View style={{flex: 1, marginLeft: SPACING.sm}}>
                 <Text style={styles.recentPatient}>
                   Patient #{item.patient_id}
@@ -231,13 +233,20 @@ const DashboardScreen = ({navigation}) => {
                   {item.severity}
                 </Text>
               </View>
-              {item.is_critical && <Text style={styles.criticalDot}>🚨</Text>}
+              {item.is_critical && (
+                <Icon
+                  name="error"
+                  size={18}
+                  color={COLORS.severe}
+                  style={{marginLeft: 4}}
+                />
+              )}
             </View>
           ))}
         </View>
       ) : (
         <View style={styles.emptyRecent}>
-          <Text style={styles.emptyRecentIcon}>📋</Text>
+          <Icon name="assignment" size={48} color={COLORS.border} />
           <Text style={styles.emptyRecentText}>No screenings yet</Text>
           <Text style={styles.emptyRecentSub}>
             Add a patient and perform a screening to see results here
@@ -264,7 +273,7 @@ const DashboardScreen = ({navigation}) => {
 
       {/* Info Banner */}
       <View style={styles.infoBanner}>
-        <Text style={styles.infoIcon}>ℹ️</Text>
+        <Icon name="info" size={20} color={COLORS.secondary} />
         <Text style={styles.infoText}>
           HemaView uses conjunctival (inner eyelid) analysis to screen for
           anemia non-invasively using your smartphone camera.
@@ -331,9 +340,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: SPACING.sm,
@@ -353,7 +362,6 @@ const styles = StyleSheet.create({
     gap: SPACING.xs,
     ...SHADOW.md,
   },
-  actionIcon: {fontSize: 28},
   actionText: {color: '#FFFFFF', fontWeight: '600', fontSize: 14},
   recentCard: {
     backgroundColor: COLORS.surface,
@@ -362,14 +370,14 @@ const styles = StyleSheet.create({
     ...SHADOW.sm,
     overflow: 'hidden',
   },
-  recentRow: {
-    flexDirection: 'row',
+  recentRow: {flexDirection: 'row', alignItems: 'center', padding: SPACING.md},
+  recentRowBorder: {borderBottomWidth: 1, borderBottomColor: COLORS.divider},
+  recentIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
     alignItems: 'center',
-    padding: SPACING.md,
-  },
-  recentRowBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.divider,
   },
   recentPatient: {fontSize: 14, fontWeight: '600', color: COLORS.textPrimary},
   recentTime: {fontSize: 11, color: COLORS.textSecondary, marginTop: 2},
@@ -380,7 +388,6 @@ const styles = StyleSheet.create({
     marginTop: 2,
     textTransform: 'capitalize',
   },
-  criticalDot: {fontSize: 16, marginLeft: SPACING.xs},
   emptyRecent: {
     backgroundColor: COLORS.surface,
     marginHorizontal: SPACING.md,
@@ -390,7 +397,6 @@ const styles = StyleSheet.create({
     gap: SPACING.sm,
     ...SHADOW.sm,
   },
-  emptyRecentIcon: {fontSize: 36},
   emptyRecentText: {
     fontSize: 16,
     fontWeight: '600',
@@ -428,7 +434,6 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     marginBottom: SPACING.xl,
   },
-  infoIcon: {fontSize: 16},
   infoText: {
     fontSize: 13,
     color: COLORS.textSecondary,
