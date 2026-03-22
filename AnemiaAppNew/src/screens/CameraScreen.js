@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useState, useRef, useEffect} from 'react';
 import {
   View,
   Text,
@@ -9,11 +9,16 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
+  Animated,
+  PanResponder,
+  Dimensions,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import {launchCamera, launchImageLibrary} from 'react-native-image-picker';
 import {screeningAPI} from '../services/api';
 import {COLORS, SPACING, RADIUS, SHADOW} from '../utils/designSystem';
+
+const {width: screenWidth} = Dimensions.get('window');
 
 const CameraScreen = ({navigation, route}) => {
   const preselectedPatient = route.params?.patient || null;
@@ -21,8 +26,139 @@ const CameraScreen = ({navigation, route}) => {
   const [analyzing, setAnalyzing] = useState(false);
   const [validationError, setValidationError] = useState(null);
 
+  // ===================================================================
+  // 🚀 PHYSICS ENGINE: Image Panning & Pinch-to-Zoom
+  // ===================================================================
+  const pan = useRef(new Animated.ValueXY({x: 0, y: 0})).current;
+  const scale = useRef(new Animated.Value(1)).current;
+
+  const currentPan = useRef({x: 0, y: 0});
+  const currentScale = useRef(1);
+  const lastImageTouch = useRef({x: 0, y: 0, distance: 0, touches: 0});
+
+  const imagePanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderTerminationRequest: () => true, // Allow children to steal touch if needed
+      onPanResponderGrant: evt => {
+        const touches = evt.nativeEvent.touches;
+        if (touches.length === 1) {
+          lastImageTouch.current = {
+            x: touches[0].pageX,
+            y: touches[0].pageY,
+            touches: 1,
+          };
+        } else if (touches.length === 2) {
+          const dx = touches[0].pageX - touches[1].pageX;
+          const dy = touches[0].pageY - touches[1].pageY;
+          lastImageTouch.current = {
+            distance: Math.sqrt(dx * dx + dy * dy),
+            touches: 2,
+          };
+        }
+      },
+      onPanResponderMove: evt => {
+        const touches = evt.nativeEvent.touches;
+
+        if (touches.length !== lastImageTouch.current.touches) {
+          if (touches.length === 1) {
+            lastImageTouch.current = {
+              x: touches[0].pageX,
+              y: touches[0].pageY,
+              touches: 1,
+            };
+          } else if (touches.length === 2) {
+            const dx = touches[0].pageX - touches[1].pageX;
+            const dy = touches[0].pageY - touches[1].pageY;
+            lastImageTouch.current = {
+              distance: Math.sqrt(dx * dx + dy * dy),
+              touches: 2,
+            };
+          }
+          return;
+        }
+
+        if (touches.length === 1) {
+          // Pan
+          const dx = touches[0].pageX - lastImageTouch.current.x;
+          const dy = touches[0].pageY - lastImageTouch.current.y;
+          currentPan.current.x += dx;
+          currentPan.current.y += dy;
+          pan.setValue({x: currentPan.current.x, y: currentPan.current.y});
+          lastImageTouch.current = {
+            x: touches[0].pageX,
+            y: touches[0].pageY,
+            touches: 1,
+          };
+        } else if (touches.length === 2) {
+          // Zoom
+          const dx = touches[0].pageX - touches[1].pageX;
+          const dy = touches[0].pageY - touches[1].pageY;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          const scaleFactor = distance / lastImageTouch.current.distance;
+
+          let newScale = currentScale.current * scaleFactor;
+          newScale = Math.max(1, Math.min(newScale, 6));
+
+          currentScale.current = newScale;
+          scale.setValue(newScale);
+          lastImageTouch.current = {distance: distance, touches: 2};
+        }
+      },
+      onPanResponderRelease: () => {
+        lastImageTouch.current.touches = 0;
+      },
+      onPanResponderTerminate: () => {
+        lastImageTouch.current.touches = 0;
+      },
+    }),
+  ).current;
+
+  // ===================================================================
+  // 🚀 PHYSICS ENGINE: The Fixed Box Resizer
+  // ===================================================================
+  const boxSizeAnim = useRef(new Animated.Value(240)).current;
+  const currentBoxSize = useRef(240);
+  const baseBoxSize = useRef(240);
+
+  const boxResizeResponder = useRef(
+    PanResponder.create({
+      // 🛑 FORCE CAPTURE: Stop the image pan from stealing this gesture
+      onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponderCapture: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponderCapture: () => true,
+      onPanResponderTerminationRequest: () => false,
+
+      onPanResponderGrant: () => {
+        // Lock in the starting size the moment the finger touches
+        baseBoxSize.current = currentBoxSize.current;
+      },
+      onPanResponderMove: (evt, gestureState) => {
+        // Smooth delta tracking based on total drag distance
+        const delta = (gestureState.dx + gestureState.dy) / 2;
+        let newSize = baseBoxSize.current + delta * 2.5; // 2.5x speed multiplier for responsiveness
+
+        // Constrain so it doesn't break the screen
+        newSize = Math.max(100, Math.min(newSize, screenWidth - 40));
+
+        currentBoxSize.current = newSize;
+        boxSizeAnim.setValue(newSize);
+      },
+      onPanResponderRelease: () => {
+        baseBoxSize.current = currentBoxSize.current;
+      },
+      onPanResponderTerminate: () => {
+        baseBoxSize.current = currentBoxSize.current;
+      },
+    }),
+  ).current;
+
+  // ===================================================================
+
   const captureImage = async (fromCamera = true) => {
-    setValidationError(null); // Clear previous errors
+    setValidationError(null);
     const options = {
       mediaType: 'photo',
       quality: 1,
@@ -35,7 +171,17 @@ const CameraScreen = ({navigation, route}) => {
         ? await launchCamera(options)
         : await launchImageLibrary(options);
       if (result.didCancel || result.errorCode) return;
-      if (result.assets?.[0]) setImage(result.assets[0]);
+      if (result.assets?.[0]) {
+        setImage(result.assets[0]);
+        // Reset all physics
+        scale.setValue(1);
+        currentScale.current = 1;
+        pan.setValue({x: 0, y: 0});
+        currentPan.current = {x: 0, y: 0};
+        boxSizeAnim.setValue(240);
+        currentBoxSize.current = 240;
+        baseBoxSize.current = 240;
+      }
     } catch (e) {
       Alert.alert(
         'Error',
@@ -87,7 +233,6 @@ const CameraScreen = ({navigation, route}) => {
       const response = await screeningAPI.analyze(formData);
       const result = response.data;
 
-      // 🛑 Strict Backend Image Validation Check
       if (result.error) {
         setValidationError(result.error);
         return;
@@ -111,13 +256,36 @@ const CameraScreen = ({navigation, route}) => {
       });
     } catch (e) {
       let msg = 'Analysis failed. Please try again.';
+
       if (e.response?.data?.detail) {
-        msg =
+        const rawError =
           typeof e.response.data.detail === 'string'
             ? e.response.data.detail
             : JSON.stringify(e.response.data.detail);
+
+        const lowerError = rawError.toLowerCase();
+
+        // UX FIX: Intercept backend HTTP Exceptions and translate them here!
+        if (lowerError.includes('blur') || lowerError.includes('variance')) {
+          msg =
+            'The image is too blurry to analyze. Please hold the camera steady, allow the lens to focus, and retake.';
+        } else if (
+          lowerError.includes('no eye') ||
+          lowerError.includes('detect')
+        ) {
+          msg =
+            'Could not cleanly detect the eye. Please ensure the inner eyelid is well-lit and centered in the box.';
+        } else if (
+          lowerError.includes('glare') ||
+          lowerError.includes('reflection')
+        ) {
+          msg =
+            'Too much light reflection detected. Please adjust your angle to reduce glare on the eye.';
+        } else {
+          msg = rawError; // Fallback to the original error if it's something else
+        }
       }
-      // Show strict validation failures in the UI instead of a popup
+
       setValidationError(msg);
     } finally {
       setAnalyzing(false);
@@ -127,8 +295,8 @@ const CameraScreen = ({navigation, route}) => {
   return (
     <ScrollView
       style={styles.container}
-      contentContainerStyle={{paddingBottom: 40}}>
-      {/* Header */}
+      contentContainerStyle={{paddingBottom: 40}}
+      scrollEnabled={!image}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Anemia Screening</Text>
         <Text style={styles.headerSub}>
@@ -136,7 +304,6 @@ const CameraScreen = ({navigation, route}) => {
         </Text>
       </View>
 
-      {/* Patient Banner */}
       {preselectedPatient ? (
         <View style={styles.patientBanner}>
           <View style={styles.patientAvatar}>
@@ -179,49 +346,83 @@ const CameraScreen = ({navigation, route}) => {
         </TouchableOpacity>
       )}
 
-      {/* Instructions */}
-      <View style={styles.instructionCard}>
-        <Text style={styles.instructionTitle}>How to Capture</Text>
-        {[
-          "Gently pull down the patient's lower eyelid",
-          'Ensure good lighting — natural or white light',
-          'Hold phone 10–15 cm from the eye',
-          'Keep the inner (pink) eyelid fully visible',
-          'Hold steady — avoid motion blur',
-        ].map((step, i) => (
-          <View key={i} style={styles.step}>
-            <View style={styles.stepNum}>
-              <Text style={styles.stepNumText}>{i + 1}</Text>
+      {!image && (
+        <View style={styles.instructionCard}>
+          <Text style={styles.instructionTitle}>How to Capture</Text>
+          {[
+            "Gently pull down the patient's lower eyelid",
+            'Ensure good lighting — natural or white light',
+            'Hold phone 10–15 cm from the eye',
+            'Keep the inner (pink) eyelid fully visible',
+            'Hold steady — avoid motion blur',
+          ].map((step, i) => (
+            <View key={i} style={styles.step}>
+              <View style={styles.stepNum}>
+                <Text style={styles.stepNumText}>{i + 1}</Text>
+              </View>
+              <Text style={styles.stepText}>{step}</Text>
             </View>
-            <Text style={styles.stepText}>{step}</Text>
-          </View>
-        ))}
-      </View>
+          ))}
+        </View>
+      )}
 
-      {/* Image Preview & Target Guide */}
+      {/* =========================================================
+          IMAGE PREVIEW & GESTURE TARGETING UI 
+      ========================================================= */}
       <View style={styles.previewContainer}>
         {image ? (
-          <View style={styles.imageWrapper}>
-            <Image
-              source={{uri: image.uri}}
-              style={styles.previewImage}
-              resizeMode="cover"
-            />
+          <View style={styles.imageBoundary} {...imagePanResponder.panHandlers}>
+            <Animated.View
+              style={[
+                styles.imageWrapper,
+                {
+                  transform: [
+                    {translateX: pan.x},
+                    {translateY: pan.y},
+                    {scale: scale},
+                  ],
+                },
+              ]}>
+              <Image
+                source={{uri: image.uri}}
+                style={styles.previewImage}
+                resizeMode="contain"
+              />
+            </Animated.View>
 
-            {/* Lenskart Style Targeting Box */}
-            <View style={styles.targetOverlay} pointerEvents="none">
-              <View style={styles.targetBox}>
+            {/* Target Box Overlay */}
+            <View style={styles.targetOverlay} pointerEvents="box-none">
+              <Animated.View
+                style={[
+                  styles.targetBox,
+                  {width: boxSizeAnim, height: boxSizeAnim},
+                ]}
+                pointerEvents="box-none">
                 <View style={styles.cornerTL} />
                 <View style={styles.cornerTR} />
                 <View style={styles.cornerBL} />
-                <View style={styles.cornerBR} />
-              </View>
+
+                {/* THE ACTIVE DRAG HANDLE */}
+                <View
+                  style={styles.resizeHandleContainer}
+                  {...boxResizeResponder.panHandlers}>
+                  <View style={styles.cornerBR_Visual} />
+                  <View style={styles.dragIconWrapper}>
+                    <Icon
+                      name="sync-alt"
+                      size={24}
+                      color="#FFFFFF"
+                      style={{transform: [{rotate: '45deg'}]}}
+                    />
+                  </View>
+                </View>
+              </Animated.View>
+
               <Text style={styles.overlayInstruction}>
-                Verify eyelid is visible inside the brackets
+                Pinch to zoom image. Drag green icon to resize box.
               </Text>
             </View>
 
-            {/* Clear Button (Rendered after overlay so it's clickable) */}
             <TouchableOpacity
               style={styles.clearBtn}
               onPress={() => {
@@ -255,7 +456,6 @@ const CameraScreen = ({navigation, route}) => {
         )}
       </View>
 
-      {/* Validation Error Banner */}
       {validationError && (
         <View style={styles.errorBanner}>
           <Icon name="error" size={24} color="#D32F2F" />
@@ -263,7 +463,6 @@ const CameraScreen = ({navigation, route}) => {
         </View>
       )}
 
-      {/* Capture Buttons */}
       <View style={styles.btnRow}>
         <TouchableOpacity
           style={[
@@ -285,7 +484,6 @@ const CameraScreen = ({navigation, route}) => {
         </TouchableOpacity>
       </View>
 
-      {/* Analyze Button */}
       <TouchableOpacity
         style={[
           styles.analyzeBtn,
@@ -306,7 +504,6 @@ const CameraScreen = ({navigation, route}) => {
         )}
       </TouchableOpacity>
 
-      {/* ML Pipeline Steps */}
       {analyzing && (
         <View style={styles.analyzingCard}>
           <Text style={styles.analyzingTitle}>ML Pipeline Running</Text>
@@ -434,29 +631,34 @@ const styles = StyleSheet.create({
     flex: 1,
     lineHeight: 20,
   },
+
   previewContainer: {
     margin: SPACING.md || 15,
-    height: 280,
+    height: 400,
     borderRadius: RADIUS.lg || 16,
-    backgroundColor: COLORS.surface || '#FFFFFF',
+    backgroundColor: '#000000',
     overflow: 'hidden',
     ...(SHADOW?.md || {elevation: 5}),
+  },
+  imageBoundary: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   imageWrapper: {width: '100%', height: '100%'},
   previewImage: {width: '100%', height: '100%'},
 
-  /* Lenskart Style Targeting Elements */
   targetOverlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.2)', // Dim the outside slightly
+    backgroundColor: 'rgba(0,0,0,0.3)',
   },
   targetBox: {
-    width: 240,
-    height: 120,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.5)',
     position: 'relative',
   },
   cornerTL: {
@@ -489,23 +691,46 @@ const styles = StyleSheet.create({
     borderLeftWidth: 4,
     borderColor: '#4CAF50',
   },
-  cornerBR: {
+
+  // 🚀 FIXED: Massive invisible hit-area for the drag handle so it never slips
+  resizeHandleContainer: {
     position: 'absolute',
-    bottom: -2,
-    right: -2,
+    bottom: -30,
+    right: -30,
+    width: 80,
+    height: 80,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+    zIndex: 999,
+  },
+  cornerBR_Visual: {
+    position: 'absolute',
+    top: 28,
+    left: 28,
     width: 25,
     height: 25,
     borderBottomWidth: 4,
     borderRightWidth: 4,
     borderColor: '#4CAF50',
   },
+  dragIconWrapper: {
+    position: 'absolute',
+    bottom: 15,
+    right: 15,
+    backgroundColor: '#4CAF50',
+    borderRadius: 16,
+    padding: 4,
+    elevation: 5,
+  },
+
   overlayInstruction: {
     color: '#fff',
-    backgroundColor: 'rgba(0,0,0,0.65)',
+    backgroundColor: 'rgba(0,0,0,0.8)',
     paddingHorizontal: 15,
     paddingVertical: 8,
     borderRadius: 20,
-    marginTop: 25,
+    marginTop: 45,
     fontSize: 13,
     fontWeight: '600',
     textAlign: 'center',
@@ -528,7 +753,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.7)',
     padding: SPACING.xs || 5,
   },
   imageInfoText: {color: '#FFFFFF', fontSize: 11, textAlign: 'center'},
@@ -537,6 +762,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     gap: SPACING.sm || 10,
+    backgroundColor: COLORS.surface || '#FFFFFF',
   },
   placeholderText: {
     fontSize: 16,
@@ -544,7 +770,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   placeholderSub: {fontSize: 12, color: COLORS.textSecondary || '#757575'},
-
   errorBanner: {
     flexDirection: 'row',
     backgroundColor: '#FFEBEE',
@@ -564,7 +789,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
   },
-
   btnRow: {
     flexDirection: 'row',
     paddingHorizontal: SPACING.md || 15,

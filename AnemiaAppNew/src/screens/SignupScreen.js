@@ -11,6 +11,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 import {authAPI} from '../services/api';
 import {COLORS, SPACING, RADIUS, SHADOW} from '../utils/designSystem';
 
@@ -86,7 +87,7 @@ const SignupScreen = ({navigation}) => {
           <TouchableOpacity
             onPress={() => navigation.goBack()}
             style={styles.backBtn}>
-            <Text style={styles.backIcon}>←</Text>
+            <Icon name="arrow-back" size={26} color="#FFFFFF" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Provider Registration</Text>
           <Text style={styles.headerSub}>
@@ -184,7 +185,11 @@ const SignupScreen = ({navigation}) => {
                 onPress={() => setShowPassword(v => !v)}
                 style={styles.eyeBtn}
                 hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}>
-                <Text style={styles.eyeText}>{showPassword ? '🙈' : '👁️'}</Text>
+                <Icon
+                  name={showPassword ? 'visibility' : 'visibility-off'}
+                  size={22}
+                  color={COLORS.textSecondary}
+                />
               </TouchableOpacity>
             </View>
           </View>
@@ -208,7 +213,11 @@ const SignupScreen = ({navigation}) => {
                 onPress={() => setShowConfirm(v => !v)}
                 style={styles.eyeBtn}
                 hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}>
-                <Text style={styles.eyeText}>{showConfirm ? '🙈' : '👁️'}</Text>
+                <Icon
+                  name={showConfirm ? 'visibility' : 'visibility-off'}
+                  size={22}
+                  color={COLORS.textSecondary}
+                />
               </TouchableOpacity>
             </View>
           </View>
@@ -247,16 +256,23 @@ const styles = StyleSheet.create({
   scroll: {flexGrow: 1, paddingBottom: 40},
   header: {
     backgroundColor: COLORS.primary,
-    padding: SPACING.lg,
-    paddingTop: SPACING.xl,
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: SPACING.xl, // Increased bottom padding to give the text more breathing room
+    paddingTop: Platform.OS === 'ios' ? 60 : 40,
   },
-  backBtn: {marginBottom: SPACING.sm},
-  backIcon: {color: '#FFFFFF', fontSize: 24},
-  headerTitle: {color: '#FFFFFF', fontSize: 22, fontWeight: '700'},
-  headerSub: {color: 'rgba(255,255,255,0.75)', fontSize: 13, marginTop: 4},
+  backBtn: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    marginBottom: SPACING.xs,
+    marginLeft: -8,
+  },
+  headerTitle: {color: '#FFFFFF', fontSize: 24, fontWeight: '700'},
+  headerSub: {color: 'rgba(255,255,255,0.85)', fontSize: 14, marginTop: 4},
   card: {
     backgroundColor: COLORS.surface,
     margin: SPACING.md,
+    marginTop: SPACING.md, // FIXED: Removed the negative margin so it no longer overlaps
     borderRadius: RADIUS.xl,
     padding: SPACING.lg,
     ...SHADOW.md,
@@ -296,7 +312,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.md,
   },
   eyeBtn: {padding: SPACING.sm, justifyContent: 'center', alignItems: 'center'},
-  eyeText: {fontSize: 18},
   signupBtn: {
     backgroundColor: COLORS.primary,
     borderRadius: RADIUS.md,
@@ -318,7 +333,8 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: COLORS.textSecondary,
     textAlign: 'center',
-    margin: SPACING.lg,
+    marginHorizontal: SPACING.xl,
+    marginTop: SPACING.md,
     lineHeight: 16,
   },
 });
