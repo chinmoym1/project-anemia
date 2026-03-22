@@ -64,6 +64,7 @@ export const screeningAPI = {
       timeout: 120000,
     }),
   getResult: sessionId => api.get(`/screening/results/${sessionId}`),
+  getHistory: (patientId) => api.get(`/screening/history/${patientId}`),
   recent: (limit = 10) => api.get('/screening/recent', {params: {limit}}),
 };
 
@@ -74,5 +75,7 @@ export const reportAPI = {
   getMeta: sessionId => 
     api.get(`/reports/${sessionId}`),
 };
+
+
 
 export default api;
