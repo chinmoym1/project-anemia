@@ -119,6 +119,27 @@ npx react-native run-android
 
 ---
 
+### Start App
+```bash
+# Terminal 1 — Backend
+cd D:\project-anemia\anemia-backend
+venv\Scripts\activate
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+
+# Terminal 2 — Metro
+cd D:\project-anemia\AnemiaAppNew
+npx react-native start
+
+# Terminal 3 — Only needed for rebuild (first time or after code changes)
+cd D:\project-anemia\AnemiaAppNew
+npx react-native run-android
+
+```
+
+---
+
+
 ## 🔒 Security Features
 
 | Feature | Implementation |
