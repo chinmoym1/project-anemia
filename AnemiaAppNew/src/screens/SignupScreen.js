@@ -154,11 +154,15 @@ const SignupScreen = ({navigation}) => {
             <TextInput
               ref={contactRef}
               style={styles.input}
-              placeholder="+91 XXXXX XXXXX"
+              placeholder="9876543210"
               placeholderTextColor={COLORS.textSecondary}
               value={contactInfo}
-              onChangeText={setContactInfo}
+              onChangeText={(text) =>{   
+                const numericValue = text.replace(/[^0-9]/g, '');   
+                setContactInfo(numericValue); 
+              }}
               keyboardType="phone-pad"
+              maxLength={10}
               returnKeyType="next"
               onSubmitEditing={() => passwordRef.current?.focus()}
               blurOnSubmit={false}
